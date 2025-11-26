@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Global Select — FY Sales Dashboard (Sales-Only Version)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- Global Styles -->
+  <style>
+    :root { color-scheme: dark light; }
+
+    body {
+      background:#0d0f18;
+      color:white;
+      font-family:Inter, Arial;
+    }
+
+    .card {
+      background:#171b26;
+      padding:18px;
+      border-radius:12px;
+      box-shadow:0 0 8px rgba(0,255,180,0.15);
+    }
+
+    .grid-cards {
+      display:grid;
+      grid-template-columns:repeat(6,minmax(0,1fr));
+      gap:1rem;
+    }
+    @media(max-width:1280px){
+      .grid-cards{grid-template-columns:repeat(3,minmax(0,1fr));}
+    }
+    @media(max-width:700px){
+      .grid-cards{grid-template-columns:1fr;}
+    }
+
+    .table {
+      width:100%;
+      border-collapse:collapse;
+    }
+    .table th, .table td {
+      padding:8px 10px;
+      border-bottom:1px solid rgba(148,163,184,.2);
+      text-align:left;
+    }
+
+    nav button {
+      padding:12px 18px;
+      cursor:pointer;
+      opacity:0.65;
+    }
+    nav .tab-active {
+      opacity:1;
+      border-bottom:2px solid #00f7b4;
+      color:#00f7b4;
+    }
+
+    .btn-ghost {
+      background:transparent;
+      border:1px solid rgba(148,163,184,.3);
+      padding:.6rem 1rem;
+      border-radius:.75rem;
+    }
+
+    .badge {
+      font-size:.75rem;
+      padding:.15rem .5rem;
+      border-radius:999px;
+    }
+
+    .hidden { display:none; }
+  </style>
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-100">
+<div class="max-w-7xl mx-auto px-4 py-6">
+
+  <!-- HEADER -->
+  <header class="mb-6 flex items-start justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold">Global Select — FY Sales Dashboard</h1>
+      <p class="text-slate-400 text-sm">
+        Cloudflare-powered Sales Dashboard (Sales-Only Version)
+      </p>
+    </div>
+    <div class="flex gap-2">
+      <button id="resetBtn" class="btn-ghost">Reset Filters</button>
+      <button id="exportBtn" class="btn-ghost">Export Current Table (CSV)</button>
+    </div>
+  </header>
+
+  <!-- Load Info -->
+  <section id="parseInfo" class="card hidden mt-3 text-sm"></section>
+
+  <!-- MAIN APP -->
+  <section id="app" class="hidden mt-4">
+
+    <!-- FILTER BAR -->
+    <section class="card mb-4">
+      <div class="flex flex-wrap gap-4 items-end">
+
+        <div>
+          <label class="block text-sm mb-1">View</label>
+          <select id="aggSelect" class="px-3 py-2 rounded-xl bg-slate-800">
+            <option value="monthly">Monthly</option>
+            <option value="quarterly">Quarterly</option>
+          </select>
+          <div class="text-xs text-slate-400 mt-1">
+            Fiscal quarters: Q1 Jul–Sep, Q2 Oct–Dec, Q3 Jan–Mar, Q4 Apr–Jun
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm mb-1">Fiscal Year</label>
+          <select id="fySelect" class="px-3 py-2 rounded-xl bg-slate-800"></select>
+        </div>
+
+        <div>
+          <label class="block text-xs mb-1">
+            <input type="checkbox" id="useRange" class="mr-2"> Use custom range
+          </label>
+          <div class="flex gap-2">
+            <div>
+              <label class="block text-sm mb-1">From</label>
+              <select id="fromMonth" class="px-3 py-2 rounded-xl bg-slate-800" disabled></select>
+            </div>
+            <div>
+              <label class="block text-sm mb-1">To</label>
+              <select id="toMonth" class="px-3 py-2 rounded-xl bg-slate-800" disabled></select>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm mb-1">Consultant</label>
+          <select id="consultantSelect" class="px-3 py-2 rounded-xl bg-slate-800"></select>
+        </div>
+
+        <div>
+          <label class="block text-sm mb-1">Provider Type</label>
+          <select id="providerSelect" class="px-3 py-2 rounded-xl bg-slate-800"></select>
+        </div>
+
+        <div class="ml-auto">
+          <label class="inline-flex items-center gap-2 text-sm">
+            <input id="rememberFilters" type="checkbox" class="scale-110">
+            Remember filters
+          </label>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- KPI CARDS -->
+    <section class="grid-cards mb-6">
+      
+      <div class="card">
+        <div class="text-2xl font-semibold" id="kpiTotalAll">–</div>
+        <div class="text-sm text-slate-400">Total Sales (till date)</div>
+      </div>
+
+      <div class="card">
+        <div class="text-2xl font-semibold" id="kpiSelPeriod">–</div>
+        <div class="text-sm text-slate-400">Selected Period</div>
+      </div>
+
+      <div class="card">
+        <div class="text-2xl font-semibold" id="kpiLastFY">–</div>
+        <div class="text-sm text-slate-400">Last FY</div>
+      </div>
+
+      <!-- UPDATED YTD CARD -->
+      <div class="card">
+        <div class="text-2xl font-semibold" id="kpiYTD">–</div>
+        <div class="text-sm text-slate-400">
+          <span id="kpiYTDLabel">YTD</span> vs Last FY YTD
+        </div>
+        <div class="text-xs text-slate-500 mt-1" id="kpiLastFY_YTD_Detail">
+          Last FY YTD: –
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="text-2xl font-semibold" id="kpiProjection">–</div>
+        <div class="text-sm text-slate-400">Projected FY</div>
+      </div>
+
+      <div class="card">
+        <div class="text-2xl font-semibold" id="kpiPoP">–</div>
+        <div class="text-sm text-slate-400">Period-over-Period</div>
+      </div>
+
+    </section>
+    <!-- TAB NAVIGATION -->
+    <nav class="border-b border-slate-700 mb-4 flex gap-4 flex-wrap">
+      <button class="py-2 tab-active" data-tab="overview">Overview</button>
+      <button class="py-2" data-tab="fytable">Table</button>
+      <button class="py-2" data-tab="provider">Provider Breakdown</button>
+      <button class="py-2" data-tab="consultant">Consultant Breakdown</button>
+      <button class="py-2" data-tab="projection">Monthly Projections</button>
+      <button class="py-2" data-tab="fycompare">FY Compare</button>
+    </nav>
+
+    <!-- OVERVIEW TAB -->
+    <section id="tab-overview">
+      <div class="card mb-4"><canvas id="chartMonthly"></canvas></div>
+      <div class="grid-cards" style="grid-template-columns:repeat(2,minmax(0,1fr));">
+        <div class="card"><canvas id="chartProviderPie"></canvas></div>
+        <div class="card"><canvas id="chartConsultantPie"></canvas></div>
+      </div>
+    </section>
+
+    <!-- TABLE TAB -->
+    <section id="tab-fytable" class="hidden">
+      <div class="card">
+        <table class="table" id="fyTable">
+          <thead>
+            <tr>
+              <th id="periodTh">Month</th>
+              <th>Net Sales</th>
+              <th>COE Count</th>
+              <th>Avg / COE</th>
+              <th># Records</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- PROVIDER TAB -->
+    <section id="tab-provider" class="hidden">
+      <div class="card mb-4"><canvas id="chartProvider"></canvas></div>
+      <div class="card">
+        <table class="table" id="providerTable">
+          <thead>
+            <tr>
+              <th>Provider Type</th>
+              <th>Net Sales</th>
+              <th>COE Count</th>
+              <th>Share %</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- CONSULTANT TAB -->
+    <section id="tab-consultant" class="hidden">
+      <div class="card mb-4"><canvas id="chartConsultant"></canvas></div>
+
+      <!-- DETAILED CONSULTANT SALES -->
+      <div class="card mt-4">
+        <h3 class="font-semibold mb-2">Detailed Consultant Sales (HE / VET / PY)</h3>
+
+        <table class="table" id="consultantDetailTable">
+          <thead>
+            <tr>
+              <th>Sales Team</th>
+              <th colspan="2">Total</th>
+              <th colspan="2">HE</th>
+              <th colspan="2">VET</th>
+              <th colspan="2">PY</th>
+            </tr>
+            <tr>
+              <th></th>
+              <th>No of CoE</th><th>Gross Sales</th>
+              <th>No of CoE</th><th>Gross Sales</th>
+              <th>No of CoE</th><th>Gross Sales</th>
+              <th>No of CoE</th><th>Gross Sales</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <!-- CONSULTANT TOTAL TABLE -->
+      <div class="card">
+        <table class="table" id="consultantTable">
+          <thead>
+            <tr>
+              <th>Consultant</th>
+              <th>Net Sales</th>
+              <th>COE Count</th>
+              <th>Share %</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <!-- UNDERPERFORMERS -->
+      <div class="card mt-4">
+        <h3 class="font-semibold mb-2">Underperformers</h3>
+        <table class="table" id="underTable">
+          <thead><tr><th>Consultant</th><th>Sales</th><th>vs Avg</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+    </section><!-- consultant -->
+
+    <!-- PROJECTIONS -->
+    <section id="tab-projection" class="hidden">
+      <div class="card mb-4"><canvas id="chartProjection"></canvas></div>
+      <div class="card">
+        <table class="table" id="projectionTable">
+          <thead>
+            <tr><th>Month</th><th>Actual</th><th>Projected</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">
+        Projection = average of completed months applied to remaining months.
+      </p>
+    </section>
+
+    <!-- FY COMPARE -->
+    <section id="tab-fycompare" class="hidden">
+      <div class="card mb-4"><canvas id="chartFY"></canvas></div>
+      <div class="card">
+        <table class="table" id="fyCompareTable">
+          <thead><tr><th>FY</th><th>Total Sales</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+  </section><!-- end #app -->
+
+</div>
+
+<script>
+
+/* ========================================
+   SALES DASHBOARD — FETCH + HELPERS
+   ======================================== */
+
+const CLOUDFLARE_URL = "https://mis-onshore.ashishoct34.workers.dev/";
+
+async function fetchFresh(url) {
+  return fetch(url + "?t=" + Date.now());
+}
+
+/* Helper: auto-date parsing */
+function parseLooseDate(s){
+  if (!s) return null;
+  const d=new Date(s);
+  if(!isNaN(d)) return d;
+  const m=String(s).match(/^(\d{1,2})[-\/](\w+)[-\/](\d{2,4})$/i);
+  if(m){
+    return new Date(
+      m[3].length===2?"20"+m[3]:m[3],
+      new Date(Date.parse(m[2]+" 1, 2000")).getMonth(),
+      m[1]
+    );
+  }
+  return null;
+}
+
+function monthKey(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; }
+function prettyMonth(ym){
+  const [y,m]=ym.split("-").map(Number);
+  return new Date(y,m-1,1).toLocaleString(undefined,{month:"short",year:"numeric"});
+}
+function fmtMoney(n){ return new Intl.NumberFormat().format(Math.round(n||0)); }
+function sum(arr,key){ return arr.reduce((a,b)=>a+(+b[key]||0),0); }
+
+function fyLabelFromDate(date){
+  const y=date.getFullYear(), m=date.getMonth();
+  return (m>=6) ? `FY ${y}-${String((y+1)%100).padStart(2,"0")}`
+                : `FY ${y-1}-${String(y%100).padStart(2,"0")}`;
+}
+
+function prevFY(label){
+  const m=label.match(/FY\s+(\d{4})-(\d{2})/);
+  if(!m) return "";
+  const y=+m[1];
+  return `FY ${y-1}-${String(y).slice(2)}`;
+}
+
+function monthsInFY(label){
+  const m=label.match(/FY\s+(\d{4})-(\d{2})/);
+  if(!m) return [];
+  const start=+m[1];
+  const arr=[];
+  for(let i=0;i<12;i++){
+    arr.push(monthKey(new Date(start,6+i,1)));
+  }
+  return arr;
+}
+
+function fyDateRange(label){
+  const m=label?.match(/FY\s+(\d{4})-(\d{2})/);
+  if(!m) return null;
+  const y=+m[1];
+  return { start:new Date(y,6,1), end:new Date(y+1,6,0) };
+}
+
+function groupBy(arr,fn){
+  const out={};
+  arr.forEach(x=>{
+    const k=fn(x);
+    (out[k]||(out[k]=[])).push(x);
+  });
+  return out;
+}
+
+function inRangeYM(ym,from,to,all){
+  const ai=all.indexOf(from), bi=all.indexOf(to), i=all.indexOf(ym);
+  if(ai<0||bi<0||i<0) return false;
+  const lo=Math.min(ai,bi), hi=Math.max(ai,bi);
+  return i>=lo && i<=hi;
+}
+
+/* QUARTER HELPERS */
+function qIndex(ym){
+  const m=+ym.split("-")[1];
+  return [3,3,3,4,4,4,1,1,1,2,2,2][m-1];
+}
+function fyStartYearFromYM(ym){
+  const [y,m]=ym.split("-").map(Number);
+  return m>=7?y:y-1;
+}
+function qLabelFromYM(ym){
+  const q=qIndex(ym);
+  const fy=fyStartYearFromYM(ym);
+  return `FY ${fy}-${String((fy+1)%100).padStart(2,"0")} Q${q}`;
+}
+/* ===============================
+   LOAD DATA + INITIAL STATE
+   =============================== */
+
+const parseInfo = document.getElementById("parseInfo");
+const app = document.getElementById("app");
+
+const aggSelect = document.getElementById("aggSelect");
+const fySelect = document.getElementById("fySelect");
+const useRange = document.getElementById("useRange");
+const fromMonth = document.getElementById("fromMonth");
+const toMonth = document.getElementById("toMonth");
+const consultantSelect = document.getElementById("consultantSelect");
+const providerSelect = document.getElementById("providerSelect");
+const rememberFilters = document.getElementById("rememberFilters");
+
+const resetBtn = document.getElementById("resetBtn");
+const exportBtn = document.getElementById("exportBtn");
+
+let raw = [], allMonths = [], allFYs = [], charts = {};
+let currentTableId = "fyTable";
+
+/* ===============================
+   LOAD CLOUDFLARE DATA
+   =============================== */
+async function loadCloudflareData() {
+  try {
+    const resp = await fetchFresh(CLOUDFLARE_URL);
+    const json = await resp.json();
+
+    raw = json.rows.map(r => {
+      const date = parseLooseDate(r[6]);
+      const sales = parseFloat(String(r[7]).replace(/[$,]/g, "")) || 0;
+
+      return {
+        date,
+        ym: date ? monthKey(date) : null,
+        sales,
+        consultant: r[8] || "All",
+        provider: r[5] || "All"
+      };
+    }).filter(r => r.date);
+
+    parseInfo.classList.remove("hidden");
+    parseInfo.innerHTML = `<span class="ok">✓ Loaded ${raw.length} rows from Cloudflare</span>`;
+
+    buildDomains();
+    initFilters();
+
+    app.classList.remove("hidden");
+    safeRenderAll();
+
+  } catch (err) {
+    parseInfo.classList.remove("hidden");
+    parseInfo.innerHTML = "<span class='warn'>⚠ Error loading data</span>";
+  }
+}
+
+/* ===============================
+   BUILD DOMAINS
+   =============================== */
+function buildDomains() {
+  const months=new Set(), fys=new Set();
+  const cons=new Set(["All"]), prov=new Set(["All"]);
+
+  raw.forEach(r => {
+    months.add(r.ym);
+    fys.add(fyLabelFromDate(r.date));
+    cons.add(r.consultant);
+    prov.add(r.provider);
+  });
+
+  allMonths = Array.from(months).sort();
+  allFYs    = Array.from(fys).sort();
+
+  fySelect.innerHTML = allFYs.map(f => `<option>${f}</option>`).join("");
+
+  fromMonth.innerHTML = allMonths.map(m => `<option value="${m}">${prettyMonth(m)}</option>`).join("");
+  toMonth.innerHTML   = fromMonth.innerHTML;
+
+  consultantSelect.innerHTML = Array.from(cons).sort().map(c => `<option>${c}</option>`).join("");
+  providerSelect.innerHTML   = Array.from(prov).sort().map(c => `<option>${c}</option>`).join("");
+}
+
+/* ===============================
+   INIT FILTERS
+   =============================== */
+function initFilters() {
+  const latest = allMonths[allMonths.length - 1];
+  const defaultFY = fyLabelFromDate(new Date(latest + "-01"));
+  const saved = JSON.parse(localStorage.getItem("gs_filters") || "null");
+
+  if (saved) {
+    aggSelect.value = saved.agg;
+    fySelect.value = saved.fy;
+    useRange.checked = saved.range;
+    fromMonth.value = saved.from;
+    toMonth.value = saved.to;
+    consultantSelect.value = saved.cons;
+    providerSelect.value = saved.prov;
+    rememberFilters.checked = true;
+
+    fromMonth.disabled = !useRange.checked;
+    toMonth.disabled = !useRange.checked;
+
+  } else {
+    fySelect.value = defaultFY;
+    useRange.checked = false;
+    fromMonth.disabled = true;
+    toMonth.disabled = true;
+
+    const fyMonths = monthsInFY(defaultFY);
+    fromMonth.value = fyMonths[0];
+    toMonth.value = latest;
+
+    consultantSelect.value = "All";
+    providerSelect.value = "All";
+  }
+}
+
+function persist() {
+  const obj = {
+    agg: aggSelect.value,
+    fy: fySelect.value,
+    range: useRange.checked,
+    from: fromMonth.value,
+    to: toMonth.value,
+    cons: consultantSelect.value,
+    prov: providerSelect.value
+  };
+  localStorage.setItem("gs_filters", JSON.stringify(obj));
+}
+
+/* ===============================
+   SAFE RENDER
+   =============================== */
+function safeRenderAll() {
+  try { renderAll(); }
+  catch (e) { console.error(e); }
+}
+
+/* ===============================
+   MAIN RENDER FUNCTION
+   =============================== */
+function renderAll() {
+
+  const fyR = fyDateRange(fySelect.value);
+  const fyMonths = monthsInFY(fySelect.value);
+
+  const cons = consultantSelect.value;
+  const prov = providerSelect.value;
+
+  const passes = r =>
+    (cons === "All" || r.consultant === cons) &&
+    (prov === "All" || r.provider === prov);
+
+  let activeMonths = [];
+  if (useRange.checked) {
+    activeMonths = allMonths.filter(m => inRangeYM(m, fromMonth.value, toMonth.value, allMonths));
+  } else {
+    activeMonths = fyMonths.slice();
+  }
+
+  let rowsActive = [];
+  if (useRange.checked) {
+    rowsActive = raw.filter(r => passes(r) && inRangeYM(r.ym, fromMonth.value, toMonth.value, allMonths));
+  } else {
+    rowsActive = raw.filter(r => passes(r) && r.date >= fyR.start && r.date <= fyR.end);
+  }
+
+  /* ==== BASIC KPIs ==== */
+  document.getElementById("kpiSelPeriod").textContent = fmtMoney(sum(rowsActive, "sales"));
+  document.getElementById("kpiTotalAll").textContent  = fmtMoney(sum(raw.filter(passes), "sales"));
+
+  const lastFY = prevFY(fySelect.value);
+  const lastR  = fyDateRange(lastFY);
+  let lastFYTotal = 0;
+
+  if (lastR) {
+    lastFYTotal = sum(
+      raw.filter(r => passes(r) && r.date >= lastR.start && r.date <= lastR.end),
+      "sales"
+    );
+  }
+
+  document.getElementById("kpiLastFY").textContent = fmtMoney(lastFYTotal);
+
+  /* ==== YTD ==== */
+  const fyRows = raw.filter(r => passes(r) && r.date >= fyR.start && r.date <= fyR.end);
+  const byMonth = groupBy(fyRows, r => r.ym);
+
+  let lastComplete = null;
+  fyMonths.forEach(m => {
+    if (sum(byMonth[m] || [], "sales") > 0) lastComplete = m;
+  });
+
+  const k = lastComplete ? fyMonths.indexOf(lastComplete) + 1 : 0;
+
+  const ytdThis = fyMonths.slice(0, k)
+    .reduce((a, m) => a + (sum(byMonth[m] || [], "sales") || 0), 0);
+
+  let ytdLast = 0;
+  if (lastR) {
+    const lastFYrows = raw.filter(r => passes(r) && r.date >= lastR.start && r.date <= lastR.end);
+    const lastByMonth = groupBy(lastFYrows, r => r.ym);
+    ytdLast = monthsInFY(lastFY).slice(0, k)
+      .reduce((a, m) => a + (sum(lastByMonth[m] || [], "sales") || 0), 0);
+  }
+
+  const delta = ytdLast > 0 ? ((ytdThis - ytdLast) / ytdLast) * 100 : null;
+
+  document.getElementById("kpiYTD").innerHTML =
+    `${fmtMoney(ytdThis)}
+     <span class="badge" style="background:${delta >= 0 ? '#16653433' : '#991b1b33'}">
+       ${delta == null ? 'n/a' : (delta >= 0 ? '+' : '') + delta.toFixed(1)}%
+     </span>`;
+
+  document.getElementById("kpiYTDLabel").textContent = `YTD (${k} mo)`;
+  document.getElementById("kpiLastFY_YTD_Detail").textContent = `Last FY YTD: ${fmtMoney(ytdLast)}`;
+
+  /* ==== PROJECTION ==== */
+  const nonzero = fyMonths.slice(0, k)
+    .map(m => sum(byMonth[m] || [], "sales"))
+    .filter(v => v > 0);
+
+  const avg = (nonzero.length ? nonzero : fyMonths.slice(0, k).map(m => sum(byMonth[m] || [], "sales")))
+    .reduce((a, b) => a + b, 0) / ((nonzero.length ? nonzero.length : k) || 1);
+
+  const proj = ytdThis + (12 - k) * avg;
+  document.getElementById("kpiProjection").textContent = fmtMoney(proj);
+
+  /* ==== POP ==== */
+  document.getElementById("periodTh").textContent =
+    aggSelect.value === "quarterly" ? "Quarter" : "Month";
+
+  let currentVal = 0, prevVal = 0, label = aggSelect.value === "quarterly" ? "QoQ" : "MoM";
+
+  if (aggSelect.value === "monthly") {
+    const grp = groupBy(rowsActive, r => r.ym);
+    const labels = activeMonths.map(prettyMonth);
+    const data = activeMonths.map(m => sum(grp[m] || [], "sales"));
+
+    charts.monthly?.destroy?.();
+    charts.monthly = new Chart(document.getElementById("chartMonthly"), {
+      type: "bar",
+      data: { labels, datasets: [{ label: "Net Sales", data }] },
+      options: { plugins: { legend: { display: false } } }
+    });
+
+    const tbody = document.querySelector("#fyTable tbody");
+    tbody.innerHTML = "";
+
+    activeMonths.forEach(m => {
+      const arr = grp[m] || [];
+      const s = sum(arr, "sales");
+      const coe = arr.length;
+
+      tbody.innerHTML += `
+        <tr>
+          <td>${prettyMonth(m)}</td>
+          <td>${fmtMoney(s)}</td>
+          <td>${coe}</td>
+          <td>${fmtMoney(coe ? (s / coe) : 0)}</td>
+          <td>${arr.length}</td>
+        </tr>`;
+    });
+
+    const last = activeMonths[activeMonths.length - 1];
+    const prev = activeMonths[activeMonths.length - 2];
+    currentVal = sum(grp[last] || [], "sales");
+    prevVal = sum(grp[prev] || [], "sales");
+
+  } else {
+
+    const grp = groupBy(rowsActive, r => qLabelFromYM(r.ym));
+    const quarters = Array.from(new Set(activeMonths.map(qLabelFromYM)));
+    const labels = quarters;
+    const data = quarters.map(q => sum(grp[q] || [], "sales"));
+
+    charts.monthly?.destroy?.();
+    charts.monthly = new Chart(document.getElementById("chartMonthly"), {
+      type: "bar",
+      data: { labels, datasets: [{ label: "Net Sales", data }] },
+      options: { plugins: { legend: { display: false } } }
+    });
+
+    const tbody = document.querySelector("#fyTable tbody");
+    tbody.innerHTML = "";
+
+    quarters.forEach(q => {
+      const arr = grp[q] || [];
+      const s = sum(arr, "sales"), coe = arr.length;
+
+      tbody.innerHTML += `
+        <tr>
+          <td>${q}</td>
+          <td>${fmtMoney(s)}</td>
+          <td>${coe}</td>
+          <td>${fmtMoney(coe ? (s / coe) : 0)}</td>
+          <td>${arr.length}</td>
+        </tr>`;
+    });
+
+    const last = quarters[quarters.length - 1];
+    const prev = quarters[quarters.length - 2];
+    currentVal = sum(grp[last] || [], "sales");
+    prevVal = sum(grp[prev] || [], "sales");
+  }
+
+  const pop = prevVal > 0 ? ((currentVal - prevVal) / prevVal) * 100 : null;
+
+  document.getElementById("kpiPoP").innerHTML =
+    `${fmtMoney(currentVal)}
+     <span class="badge" style="background:${pop >= 0 ? '#16653433' : '#991b1b33'}">
+       ${pop == null ? 'n/a' : (pop >= 0 ? '+' : '') + pop.toFixed(1)}% ${label}
+     </span>`;
+
+  /* RENDER ALL OTHER SECTIONS */
+  renderProvider(rowsActive);
+  renderConsultant(rowsActive);
+  renderProjection(fyMonths, byMonth, fyMonths.slice(0, k), avg);
+  renderFYCompare();
+}
+
+/* ===============================
+   PROVIDER RENDER
+   =============================== */
+function renderProvider(rows) {
+  const sumMap = {}, cntMap = {};
+  rows.forEach(r => {
+    sumMap[r.provider] = (sumMap[r.provider] || 0) + r.sales;
+    cntMap[r.provider] = (cntMap[r.provider] || 0) + 1;
+  });
+
+  const labels = Object.keys(sumMap).sort();
+  const data = labels.map(k => sumMap[k]);
+
+  charts.provider?.destroy?.();
+  charts.provider = new Chart(document.getElementById("chartProvider"), {
+    type: "bar",
+    data: { labels, datasets: [{ label: "Net Sales", data }] },
+    options: { plugins: { legend: { display: false } } }
+  });
+
+  const tbody = document.querySelector("#providerTable tbody");
+  tbody.innerHTML = "";
+  const total = data.reduce((a, b) => a + b, 0) || 1;
+
+  labels.forEach(l => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${l}</td>
+        <td>${fmtMoney(sumMap[l])}</td>
+        <td>${cntMap[l]}</td>
+        <td>${((sumMap[l] / total) * 100).toFixed(1)}%</td>
+      </tr>`;
+  });
+
+  charts.providerPie?.destroy?.();
+  charts.providerPie = new Chart(document.getElementById("chartProviderPie"), {
+    type: "doughnut",
+    data: { labels, datasets: [{ data }] },
+    options: { plugins: { legend: { position: "bottom" } } }
+  });
+}
+
+/* ===============================
+   CONSULTANT RENDER
+   =============================== */
+function renderConsultant(rows) {
+  const sumMap = {}, cntMap = {};
+
+  rows.forEach(r => {
+    sumMap[r.consultant] = (sumMap[r.consultant] || 0) + r.sales;
+    cntMap[r.consultant] = (cntMap[r.consultant] || 0) + 1;
+  });
+
+  const labels = Object.keys(sumMap)
+    .sort((a, b) => (sumMap[b] - sumMap[a]) || a.localeCompare(b));
+
+  const data = labels.map(k => sumMap[k]);
+
+  charts.consultant?.destroy?.();
+  charts.consultant = new Chart(document.getElementById("chartConsultant"), {
+    type: "bar",
+    data: { labels, datasets: [{ label: "Net Sales", data }] },
+    options: { indexAxis: "y", plugins: { legend: { display: false } } }
+  });
+
+  const tbody = document.querySelector("#consultantTable tbody");
+  tbody.innerHTML = "";
+  const total = data.reduce((a, b) => a + b, 0) || 1;
+
+  labels.forEach(l => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${l}</td>
+        <td>${fmtMoney(sumMap[l])}</td>
+        <td>${cntMap[l]}</td>
+        <td>${((sumMap[l] / total) * 100).toFixed(1)}%</td>
+      </tr>`;
+  });
+
+  const avg = total / labels.length;
+  const under = labels.filter(l => sumMap[l] < 0.5 * avg);
+
+  const ubody = document.querySelector("#underTable tbody");
+  ubody.innerHTML = "";
+  under.forEach(name => {
+    const s = sumMap[name];
+    ubody.innerHTML += `
+      <tr>
+        <td>${name}</td>
+        <td>${fmtMoney(s)}</td>
+        <td>${((s / (avg || 1)) * 100).toFixed(0)}%</td>
+      </tr>`;
+  });
+
+  /* DETAILED CONSULTANT (automatic provider mapping) */
+  renderConsultantDetail(rows);
+}
+
+/* ===============================
+   CONSULTANT DETAIL (auto provider)
+   =============================== */
+function renderConsultantDetail(rows) {
+  const detail = {};
+
+  rows.forEach(r => {
+    const c = r.consultant;
+    let p = r.provider;
+
+    /* auto-detect category — ANY new provider auto-categorised */
+    let cat = "OTHER";
+    if (p.toUpperCase().includes("HE")) cat = "HE";
+    else if (p.toUpperCase().includes("VET")) cat = "VET";
+    else if (p.toUpperCase().includes("PY")) cat = "PY";
+    else cat = "OTHER";
+
+    if (!detail[c]) {
+      detail[c] = {
+        t_coe:0, t_sales:0,
+        he_coe:0, he_sales:0,
+        vet_coe:0, vet_sales:0,
+        py_coe:0, py_sales:0,
+        other_coe:0, other_sales:0
+      };
+    }
+
+    detail[c].t_coe++;
+    detail[c].t_sales += r.sales;
+
+    if (cat === "HE") {
+      detail[c].he_coe++;
+      detail[c].he_sales += r.sales;
+    } else if (cat === "VET") {
+      detail[c].vet_coe++;
+      detail[c].vet_sales += r.sales;
+    } else if (cat === "PY") {
+      detail[c].py_coe++;
+      detail[c].py_sales += r.sales;
+    } else {
+      detail[c].other_coe++;
+      detail[c].other_sales += r.sales;
+    }
+  });
+
+  const tbody = document.querySelector("#consultantDetailTable tbody");
+  tbody.innerHTML = "";
+
+  Object.keys(detail).forEach(c => {
+    const d = detail[c];
+    tbody.innerHTML += `
+      <tr>
+        <td>${c}</td>
+        <td>${d.t_coe}</td>
+        <td>${fmtMoney(d.t_sales)}</td>
+
+        <td>${d.he_coe}</td>
+        <td>${fmtMoney(d.he_sales)}</td>
+
+        <td>${d.vet_coe}</td>
+        <td>${fmtMoney(d.vet_sales)}</td>
+
+        <td>${d.py_coe}</td>
+        <td>${fmtMoney(d.py_sales)}</td>
+      </tr>`;
+  });
+
+  /* TOTAL ROW */
+  const totals = {
+    t_coe:0, t_sales:0,
+    he_coe:0, he_sales:0,
+    vet_coe:0, vet_sales:0,
+    py_coe:0, py_sales:0
+  };
+
+  Object.values(detail).forEach(d => {
+    totals.t_coe += d.t_coe;
+    totals.t_sales += d.t_sales;
+    totals.he_coe += d.he_coe;
+    totals.he_sales += d.he_sales;
+    totals.vet_coe += d.vet_coe;
+    totals.vet_sales += d.vet_sales;
+    totals.py_coe += d.py_coe;
+    totals.py_sales += d.py_sales;
+  });
+
+  tbody.innerHTML += `
+    <tr style="font-weight:bold; border-top:2px solid #666;">
+      <td>Total</td>
+      <td>${totals.t_coe}</td>
+      <td>${fmtMoney(totals.t_sales)}</td>
+
+      <td>${totals.he_coe}</td>
+      <td>${fmtMoney(totals.he_sales)}</td>
+
+      <td>${totals.vet_coe}</td>
+      <td>${fmtMoney(totals.vet_sales)}</td>
+
+      <td>${totals.py_coe}</td>
+      <td>${fmtMoney(totals.py_sales)}</td>
+    </tr>`;
+}
+
+/* ===============================
+   PROJECTION RENDER
+   =============================== */
+function renderProjection(fyMonths, byMonth, completed, avg) {
+  const labels = fyMonths.map(prettyMonth);
+  const actual = fyMonths.map(m => sum(byMonth[m] || [], "sales"));
+  const proj = fyMonths.map(m => completed.includes(m) ? 0 : avg);
+
+  charts.projection?.destroy?.();
+  charts.projection = new Chart(document.getElementById("chartProjection"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        { label: "Actual", data: actual, order: 1 },
+        { label: "Projected", data: proj, order: 2 }
+      ]
+    },
+    options: { plugins: { legend: { display: true } } }
+  });
+}
+
+/* ===============================
+   FY COMPARE
+   =============================== */
+function renderFYCompare() {
+  const totals = {};
+  raw.forEach(r => {
+    const fy = fyLabelFromDate(r.date);
+    totals[fy] = (totals[fy] || 0) + r.sales;
+  });
+
+  const labels = Object.keys(totals).sort();
+  const data = labels.map(l => totals[l]);
+
+  charts.fy?.destroy?.();
+  charts.fy = new Chart(document.getElementById("chartFY"), {
+    type: "bar",
+    data: { labels, datasets: [{ label: "FY Total Sales", data }] },
+    options: { plugins: { legend: { display: false } } }
+  });
+
+  const tbody = document.querySelector("#fyCompareTable tbody");
+  tbody.innerHTML = "";
+  labels.forEach(l => {
+    tbody.innerHTML += `<tr><td>${l}</td><td>${fmtMoney(totals[l])}</td></tr>`;
+  });
+}
+
+/* ===============================
+   EXPORT CSV
+   =============================== */
+exportBtn.addEventListener("click", () => {
+  const table = document.getElementById(currentTableId);
+  const rows = [...table.querySelectorAll("tr")].map(tr =>
+    [...tr.children].map(td => `"${td.innerText.replace(/"/g, '""')}"`).join(",")
+  );
+  const csv = rows.join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "table.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+/* ===============================
+   RESET FILTERS
+   =============================== */
+resetBtn.addEventListener("click", () => {
+  localStorage.removeItem("gs_filters");
+  location.reload();
+});
+
+/* ===============================
+   FILTER EVENTS
+   =============================== */
+[
+  aggSelect, fySelect, useRange, fromMonth, toMonth,
+  consultantSelect, providerSelect, rememberFilters
+].forEach(el => {
+  el.addEventListener("change", () => {
+    if (el === useRange) {
+      fromMonth.disabled = !useRange.checked;
+      toMonth.disabled = !useRange.checked;
+    }
+    if (rememberFilters.checked) persist();
+    safeRenderAll();
+  });
+});
+
+/* ===============================
+   TABS
+   =============================== */
+document.querySelectorAll("nav [data-tab]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("nav [data-tab]").forEach(b => b.classList.remove("tab-active"));
+    document.querySelectorAll("section[id^='tab-']").forEach(s => s.classList.add("hidden"));
+
+    btn.classList.add("tab-active");
+    document.getElementById("tab-" + btn.dataset.tab).classList.remove("hidden");
+
+    currentTableId =
+      btn.dataset.tab === "fytable" ? "fyTable" :
+      btn.dataset.tab === "provider" ? "providerTable" :
+      btn.dataset.tab === "consultant" ? "consultantTable" :
+      btn.dataset.tab === "fycompare" ? "fyCompareTable" :
+      "fyTable";
+  });
+});
+
+/* ===============================
+   START
+   =============================== */
+loadCloudflareData();
+
+</script>
+</body>
+</html>
