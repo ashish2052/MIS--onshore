@@ -484,6 +484,7 @@ async function loadCloudflareData() {
     parseInfo.classList.remove("hidden");
     parseInfo.innerHTML = `<span class="ok">✓ Loaded ${raw.length} rows from Cloudflare</span>`;
 
+    window.rawByMonth = groupBy(raw, r => r.ym);
     buildDomains();
     initFilters();
 
@@ -676,7 +677,7 @@ function renderAll() {
   let currentVal = 0, prevVal = 0, label = aggSelect.value === "quarterly" ? "QoQ" : "MoM";
 
   if (aggSelect.value === "monthly") {
-    const grp = groupBy(rowsActive, r => r.ym);
+    const grp = window.rawByMonth;
     const labels = activeMonths.map(prettyMonth);
     const data = activeMonths.map(m => sum(grp[m] || [], "sales"));
 
