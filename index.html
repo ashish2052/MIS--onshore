@@ -488,7 +488,7 @@ async function loadCloudflareData() {
     initFilters();
 
     app.classList.remove("hidden");
-    safeRenderAll();
+    renderVisibleTabOnly();
 
   } catch (err) {
     parseInfo.classList.remove("hidden");
