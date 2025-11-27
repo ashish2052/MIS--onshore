@@ -1051,7 +1051,7 @@ resetBtn.addEventListener("click", () => {
       toMonth.disabled = !useRange.checked;
     }
     if (rememberFilters.checked) persist();
-    safeRenderAll();
+   renderVisibleTabOnly();
   });
 });
 
