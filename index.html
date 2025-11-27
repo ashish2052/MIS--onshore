@@ -336,12 +336,58 @@
         </table>
       </div>
     </section>
+<!-- AR TAB -->
+<section id="tab-ar" class="hidden">
+
+  <h2 class="text-xl font-semibold mb-3">Admission Receivable</h2>
+  <div class="card mb-6">
+    <table class="table" id="arAdmissionTable">
+      <thead>
+        <tr>
+          <th>Aging Bucket</th>
+          <th>Amount (NPR)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <h2 class="text-xl font-semibold mb-3">Migration Receivable</h2>
+  <div class="card mb-6">
+    <table class="table" id="arMigrationTable">
+      <thead>
+        <tr>
+          <th>Aging Bucket</th>
+          <th>Amount (NPR)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+</section>
 
   </section><!-- end #app -->
 
 </div>
 
 <script>
+  async function loadARData() {
+  try {
+    const resp = await fetch("https://ar.ashishoct34.workers.dev/?t=" + Date.now());
+    const json = await resp.json();
+
+    window.AR_ADMISSION = json.admission_receivable;
+    window.AR_MIGRATION = json.migration_receivable;
+    window.MIS_OLD = json.mis;
+
+    console.log("Loaded AR + MIS:", json);
+
+  } catch (err) {
+    console.error("AR/MIS Load Error:", err);
+  }
+}
+
 
 /* ========================================
    SALES DASHBOARD — FETCH + HELPERS
@@ -1103,7 +1149,9 @@ function renderVisibleTabOnly() {
 /* ===============================
    START
    =============================== */
-// First load data (fast)
+// Load AR + OLD MIS from second Worker
+loadARData(); 
+  // First load data (fast)
 loadCloudflareData().then(() => {
   // After UI appears, draw heavy charts after small delay
   setTimeout(() => {
