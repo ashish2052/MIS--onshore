@@ -1126,13 +1126,19 @@ function renderVisibleTabOnly() {
     return;
   }
 
-  // AR + OLD MIS (empty, no rendering needed)
-  if (active === "ar" || active === "oldmis") {
+  // AR TAB → render AR
+  if (active === "ar") {
+    renderAR();
     return;
+  }
+
+  // OLD MIS TAB → we will render soon
+  if (active === "oldmis") {
+    return; 
   }
 }
 
-  document.querySelectorAll("nav [data-tab]").forEach(btn => {
+document.querySelectorAll("nav [data-tab]").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll("nav [data-tab]").forEach(b => b.classList.remove("tab-active"));
     document.querySelectorAll("section[id^='tab-']").forEach(s => s.classList.add("hidden"));
@@ -1146,11 +1152,12 @@ function renderVisibleTabOnly() {
       btn.dataset.tab === "consultant" ? "consultantTable" :
       btn.dataset.tab === "fycompare" ? "fyCompareTable" :
       "fyTable";
-        if (btn.dataset.tab === "ar") {
-      renderAR();
-    }
+
+    if (btn.dataset.tab === "ar") renderAR();
+    if (btn.dataset.tab !== "ar") renderVisibleTabOnly();
   });
 });
+
 /* ===============================
    RENDER AR TABLES
    =============================== */
