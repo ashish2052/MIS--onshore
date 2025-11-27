@@ -1078,7 +1078,13 @@ document.querySelectorAll("nav [data-tab]").forEach(btn => {
 /* ===============================
    START
    =============================== */
-loadCloudflareData();
+// First load data (fast)
+loadCloudflareData().then(() => {
+  // After UI appears, draw heavy charts after small delay
+  setTimeout(() => {
+    safeRenderAll();
+  }, 50);
+});
 
 </script>
 </body>
