@@ -336,61 +336,12 @@
         </table>
       </div>
     </section>
-<!-- AR TAB -->
-<section id="tab-ar" class="hidden">
-
-  <h2 class="text-xl font-semibold mb-3">Admission Receivable</h2>
-  <div class="card mb-6">
-    <table class="table" id="arAdmissionTable">
-     <thead>
-  <tr>
-    <th>Aging Bucket</th>
-    <th>Amount (NPR)</th>
-    <th>% of Total</th>
-  </tr>
-</thead>
-
-      <tbody></tbody>
-    </table>
-  </div>
-
-  <h2 class="text-xl font-semibold mb-3">Migration Receivable</h2>
-  <div class="card mb-6">
-    <table class="table" id="arMigrationTable">
-      <thead>
-        <tr>
-          <th>Aging Bucket</th>
-          <th>Amount (NPR)</th>
-            <th>% of Total</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </div>
-
-</section>
 
   </section><!-- end #app -->
 
 </div>
 
 <script>
-  async function loadARData() {
-  try {
-    const resp = await fetch("https://ar.ashishoct34.workers.dev/?t=" + Date.now());
-    const json = await resp.json();
-
-    window.AR_ADMISSION = json.admission_receivable;
-    window.AR_MIGRATION = json.migration_receivable;
-    window.MIS_OLD = json.mis;
-
-    console.log("Loaded AR + MIS:", json);
-
-  } catch (err) {
-    console.error("AR/MIS Load Error:", err);
-  }
-}
-
 
 /* ========================================
    SALES DASHBOARD — FETCH + HELPERS
@@ -533,12 +484,11 @@ async function loadCloudflareData() {
     parseInfo.classList.remove("hidden");
     parseInfo.innerHTML = `<span class="ok">✓ Loaded ${raw.length} rows from Cloudflare</span>`;
 
-    window.rawByMonth = groupBy(raw, r => r.ym);
     buildDomains();
     initFilters();
 
     app.classList.remove("hidden");
-    renderVisibleTabOnly();
+    safeRenderAll();
 
   } catch (err) {
     parseInfo.classList.remove("hidden");
@@ -726,12 +676,11 @@ function renderAll() {
   let currentVal = 0, prevVal = 0, label = aggSelect.value === "quarterly" ? "QoQ" : "MoM";
 
   if (aggSelect.value === "monthly") {
-    const grp = window.rawByMonth;
+    const grp = groupBy(rowsActive, r => r.ym);
     const labels = activeMonths.map(prettyMonth);
     const data = activeMonths.map(m => sum(grp[m] || [], "sales"));
 
     charts.monthly?.destroy?.();
-    if (document.querySelector("nav .tab-active").dataset.tab !== "overview") return;
     charts.monthly = new Chart(document.getElementById("chartMonthly"), {
       type: "bar",
       data: { labels, datasets: [{ label: "Net Sales", data }] },
@@ -1023,7 +972,6 @@ function renderProjection(fyMonths, byMonth, completed, avg) {
   const proj = fyMonths.map(m => completed.includes(m) ? 0 : avg);
 
   charts.projection?.destroy?.();
-  if (document.querySelector("nav .tab-active").dataset.tab !== "projection") return;
   charts.projection = new Chart(document.getElementById("chartProjection"), {
     type: "bar",
     data: {
@@ -1051,7 +999,6 @@ function renderFYCompare() {
   const data = labels.map(l => totals[l]);
 
   charts.fy?.destroy?.();
-  if (document.querySelector("nav .tab-active").dataset.tab !== "fycompare") return;
   charts.fy = new Chart(document.getElementById("chartFY"), {
     type: "bar",
     data: { labels, datasets: [{ label: "FY Total Sales", data }] },
@@ -1104,7 +1051,7 @@ resetBtn.addEventListener("click", () => {
       toMonth.disabled = !useRange.checked;
     }
     if (rememberFilters.checked) persist();
-   renderVisibleTabOnly();
+    safeRenderAll();
   });
 });
 
@@ -1126,19 +1073,13 @@ function renderVisibleTabOnly() {
     return;
   }
 
-  // AR TAB → render AR
-  if (active === "ar") {
-    renderAR();
+  // AR + OLD MIS (empty, no rendering needed)
+  if (active === "ar" || active === "oldmis") {
     return;
-  }
-
-  // OLD MIS TAB → we will render soon
-  if (active === "oldmis") {
-    return; 
   }
 }
 
-document.querySelectorAll("nav [data-tab]").forEach(btn => {
+  document.querySelectorAll("nav [data-tab]").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll("nav [data-tab]").forEach(b => b.classList.remove("tab-active"));
     document.querySelectorAll("section[id^='tab-']").forEach(s => s.classList.add("hidden"));
@@ -1152,74 +1093,13 @@ document.querySelectorAll("nav [data-tab]").forEach(btn => {
       btn.dataset.tab === "consultant" ? "consultantTable" :
       btn.dataset.tab === "fycompare" ? "fyCompareTable" :
       "fyTable";
-
-    if (btn.dataset.tab === "ar") renderAR();
-    if (btn.dataset.tab !== "ar") renderVisibleTabOnly();
   });
 });
 
 /* ===============================
-   RENDER AR TABLES
-   =============================== */
-function renderAR() {
-  if (!window.AR_ADMISSION || !window.AR_MIGRATION) return;
-
-  const ad = window.AR_ADMISSION;
-  const mg = window.AR_MIGRATION;
-
-  const adBody = document.querySelector("#arAdmissionTable tbody");
-  const mgBody = document.querySelector("#arMigrationTable tbody");
-
-  adBody.innerHTML = "";
-  mgBody.innerHTML = "";
-
-  const buckets = [
-    { key: "not_due", label: "Not Due" },
-    { key: "upto_30", label: "Up to 30 Days" },
-    { key: "more_30", label: "31–60 Days" },
-    { key: "more_60", label: "61–90 Days" },
-    { key: "more_90", label: "90+ Days" },
-    { key: "total", label: "Total Receivable" }
-  ];
-
-  // ==== TOTALS FOR PERCENT ====
-  const totalAd = ad.total || 0;
-  const totalMg = mg.total || 0;
-
-  // ==== Admission Table ====
-  buckets.forEach(b => {
-    const val = ad[b.key] || 0;
-    const pct = totalAd ? ((val / totalAd) * 100).toFixed(1) : "0.0";
-
-    adBody.innerHTML += `
-      <tr>
-        <td>${b.label}</td>
-        <td>${fmtMoney(val)}</td>
-        <td>${pct}%</td>
-      </tr>
-    `;
-  });
-
-  // ==== Migration Table ====
-  buckets.forEach(b => {
-    const val = mg[b.key] || 0;
-    const pct = totalMg ? ((val / totalMg) * 100).toFixed(1) : "0.0";
-
-    mgBody.innerHTML += `
-      <tr>
-        <td>${b.label}</td>
-        <td>${fmtMoney(val)}</td>
-        <td>${pct}%</td>
-      </tr>
-    `;
-  });
-}
-/* ===============================
    START
    =============================== */
-// Load AR + OLD MIS from second Worker
-loadARData(); 
-  // First load data (fast)
+// First load data (fast)
 loadCloudflareData().then(() => {
   // After UI appears, draw heavy charts after small delay
   setTimeout(() => {
