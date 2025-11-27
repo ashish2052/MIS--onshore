@@ -1058,7 +1058,28 @@ resetBtn.addEventListener("click", () => {
 /* ===============================
    TABS
    =============================== */
-document.querySelectorAll("nav [data-tab]").forEach(btn => {
+function renderVisibleTabOnly() {
+  const active = document.querySelector("nav .tab-active").dataset.tab;
+
+  if (
+    active === "overview" ||
+    active === "fytable" ||
+    active === "provider" ||
+    active === "consultant" ||
+    active === "projection" ||
+    active === "fycompare"
+  ) {
+    renderAll();
+    return;
+  }
+
+  // AR + OLD MIS (empty, no rendering needed)
+  if (active === "ar" || active === "oldmis") {
+    return;
+  }
+}
+
+  document.querySelectorAll("nav [data-tab]").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll("nav [data-tab]").forEach(b => b.classList.remove("tab-active"));
     document.querySelectorAll("section[id^='tab-']").forEach(s => s.classList.add("hidden"));
