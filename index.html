@@ -1143,8 +1143,57 @@ function renderVisibleTabOnly() {
       btn.dataset.tab === "consultant" ? "consultantTable" :
       btn.dataset.tab === "fycompare" ? "fyCompareTable" :
       "fyTable";
+        if (btn.dataset.tab === "ar") {
+      renderAR();
+    }
   });
 });
+/* ===============================
+   RENDER AR TABLES
+   =============================== */
+function renderAR() {
+
+  // If AR not loaded yet, do nothing
+  if (!window.AR_ADMISSION || !window.AR_MIGRATION) return;
+
+  const ad = window.AR_ADMISSION;
+  const mg = window.AR_MIGRATION;
+
+  const adBody = document.querySelector("#arAdmissionTable tbody");
+  const mgBody = document.querySelector("#arMigrationTable tbody");
+
+  adBody.innerHTML = "";
+  mgBody.innerHTML = "";
+
+  const buckets = [
+    { key: "not_due", label: "Not Due" },
+    { key: "upto_30", label: "Up to 30 Days" },
+    { key: "more_30", label: "31–60 Days" },
+    { key: "more_60", label: "61–90 Days" },
+    { key: "more_90", label: "90+ Days" },
+    { key: "total", label: "Total Receivable" }
+  ];
+
+  // === Admission Table ===
+  buckets.forEach(b => {
+    adBody.innerHTML += `
+      <tr>
+        <td>${b.label}</td>
+        <td>${fmtMoney(ad[b.key] || 0)}</td>
+      </tr>
+    `;
+  });
+
+  // === Migration Table ===
+  buckets.forEach(b => {
+    mgBody.innerHTML += `
+      <tr>
+        <td>${b.label}</td>
+        <td>${fmtMoney(mg[b.key] || 0)}</td>
+      </tr>
+    `;
+  });
+}
 
 /* ===============================
    START
