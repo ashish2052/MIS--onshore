@@ -191,7 +191,7 @@ function renderUI(data) {
     renderAR(ar);
 
     // Old MIS
-    renderOldMIS(data.mis);
+    renderOldMIS(data);
 
     // Charts
     updateChart("monthly", "chartMonthly", "bar", chartData.monthly.labels, [{ label: "Net Sales", data: chartData.monthly.data }]);
@@ -249,20 +249,121 @@ function renderAR(arData) {
     els.arContent.innerHTML += render(arData.migration, "Migration Receivable");
 }
 
-function renderOldMIS(mis) {
+function renderOldMIS(data) {
+    const { mis, kpis, tables, ar } = data;
+    const container = els.oldMisContent;
+    container.innerHTML = "";
+
     if (!mis || !mis.periods || mis.periods.length === 0) {
-        els.oldMisContent.innerHTML = `<div class="card p-8 text-center text-slate-400">No Old MIS data for selected period</div>`;
+        container.innerHTML = `<div class="card p-8 text-center text-slate-400">No Old MIS data for selected period</div>`;
         return;
     }
 
-    const { periods, favourable, moderate, invoiced, received } = mis;
+    // --- Helper to get provider sales ---
+    const getProvSale = (label) => {
+        const row = tables.provider.find(r => r.label === label);
+        return row ? row.sales : 0;
+    };
 
-    let html = `
-    <div class="card overflow-x-auto">
+    // --- TOP SECTION ---
+    const topSection = document.createElement("div");
+    topSection.className = "grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8";
+
+    // 1. Admission Business
+    const cardBiz = document.createElement("div");
+    cardBiz.className = "card p-4";
+    cardBiz.innerHTML = `
+        <h3 class="font-bold text-lg mb-3 border-b border-slate-700 pb-2">Admission Business</h3>
+        <div class="space-y-2 text-sm">
+            <div class="flex justify-between bg-red-900/20 p-2 rounded">
+                <span>Total Sales Till Date</span>
+                <span class="font-bold">${fmtMoney(kpis.totalAll)}</span>
+            </div>
+            <div class="flex justify-between bg-red-900/20 p-2 rounded">
+                <span>Sales of Selected Period</span>
+                <span class="font-bold">${fmtMoney(kpis.selPeriod)}</span>
+            </div>
+            <div class="mt-4 font-semibold text-slate-300">Estimated Total Receivables</div>
+            <div class="flex justify-between pl-4"><span>HE - Private</span> <span>${fmtMoney(getProvSale("HE - Private"))}</span></div>
+            <div class="flex justify-between pl-4"><span>HE - Public</span> <span>${fmtMoney(getProvSale("HE - Public"))}</span></div>
+            <div class="flex justify-between pl-4"><span>VET</span> <span>${fmtMoney(getProvSale("VET"))}</span></div>
+            <div class="flex justify-between pl-4"><span>PY Provider</span> <span>${fmtMoney(getProvSale("PY"))}</span></div>
+        </div>
+    `;
+
+    // 2. AR Summary
+    const cardAR = document.createElement("div");
+    cardAR.className = "card p-4";
+    const admRec = ar.admission ? ar.admission.total : 0;
+    const migRec = ar.migration ? ar.migration.total : 0;
+    cardAR.innerHTML = `
+        <h3 class="font-bold text-lg mb-3 border-b border-slate-700 pb-2">Receivable Summary</h3>
+        <div class="space-y-2 text-sm">
+            <div class="flex justify-between bg-orange-900/20 p-2 rounded">
+                <span>Admission Receivable</span>
+                <span class="font-bold">${fmtMoney(admRec)}</span>
+            </div>
+            <div class="flex justify-between p-2">
+                <span>Insurance Receivable</span>
+                <span>0</span>
+            </div>
+            <div class="mt-4 font-semibold text-slate-300">Migration Clients:</div>
+            <div class="flex justify-between pl-4 bg-orange-900/20 p-2 rounded">
+                <span>Receivable</span>
+                <span class="font-bold">${fmtMoney(migRec)}</span>
+            </div>
+             <div class="flex justify-between pl-4 p-2">
+                <span>Advance</span>
+                <span>0</span>
+            </div>
+        </div>
+    `;
+
+    // 3. Admission Ageing
+    const cardAgeing = document.createElement("div");
+    cardAgeing.className = "card p-4";
+    let ageingHtml = `<h3 class="font-bold text-lg mb-3 border-b border-slate-700 pb-2">Admission Receivable Ageing</h3>`;
+    if (ar.admission) {
+        const buckets = [
+            { key: "more_90", label: "More than 90 days" },
+            { key: "more_60", label: "More than 60 days" },
+            { key: "more_30", label: "More than 30 days" },
+            { key: "upto_30", label: "Up to 30 days" },
+            { key: "not_due", label: "Not due" },
+            { key: "total", label: "Total" }
+        ];
+        ageingHtml += `<table class="w-full text-sm text-right"><thead><tr class="text-slate-400"><th>Age</th><th>Amount</th><th>%</th></tr></thead><tbody>`;
+        buckets.forEach(b => {
+            const val = ar.admission[b.key] || 0;
+            const pct = admRec ? ((val / admRec) * 100).toFixed(1) : "0.0";
+            ageingHtml += `<tr class="border-b border-slate-800">
+                <td class="text-left py-1">${b.label}</td>
+                <td class="py-1">${fmtMoney(val)}</td>
+                <td class="py-1">${pct}%</td>
+            </tr>`;
+        });
+        ageingHtml += `</tbody></table>`;
+    } else {
+        ageingHtml += `<div class="text-slate-400">No Data</div>`;
+    }
+    cardAgeing.innerHTML = ageingHtml;
+
+    topSection.appendChild(cardBiz);
+    topSection.appendChild(cardAR);
+    topSection.appendChild(cardAgeing);
+    container.appendChild(topSection);
+
+
+    // --- MIDDLE SECTION (MIS Table) ---
+    const { periods, favourable, moderate, invoiced, received } = mis;
+    const misSection = document.createElement("div");
+    misSection.className = "card overflow-x-auto mb-8";
+    misSection.innerHTML = `
+      <h3 class="font-bold text-lg mb-3 p-4 pb-0">Expected Receivable - Period</h3>
       <table class="table">
         <thead>
           <tr>
-            <th>Expected Receivable - Period</th>
+            <th>Scenario</th>
             ${periods.map(p => `<th>${p}</th>`).join("")}
           </tr>
         </thead>
@@ -275,19 +376,57 @@ function renderOldMIS(mis) {
             <td>Moderate Scenario</td>
             ${moderate.map(v => `<td>${fmtMoney(v)}</td>`).join("")}
           </tr>
-          <tr class="bg-slate-800/50">
+          <tr class="bg-green-900/20">
             <td>Actual Invoiced</td>
             ${invoiced.map(v => `<td>${v ? fmtMoney(v) : "NA"}</td>`).join("")}
           </tr>
-          <tr class="bg-slate-800/50">
+          <tr class="bg-green-900/20">
             <td>Actual Received</td>
             ${received.map(v => `<td>${v ? fmtMoney(v) : "NA"}</td>`).join("")}
           </tr>
         </tbody>
       </table>
-    </div>
-  `;
-    els.oldMisContent.innerHTML = html;
+    `;
+    container.appendChild(misSection);
+
+
+    // --- BOTTOM SECTION (Consultant Detail) ---
+    const bottomSection = document.createElement("div");
+    bottomSection.className = "card overflow-x-auto";
+    bottomSection.innerHTML = `<h3 class="font-bold text-lg mb-3 p-4 pb-0">Admission Sales Breakdown</h3>`;
+
+    // Clone the existing detail table logic
+    let detailHtml = `<table class="table"><thead>
+        <tr>
+            <th>Sales Team</th>
+            <th colspan="2">Total</th>
+            <th colspan="2">HE</th>
+            <th colspan="2">VET</th>
+            <th colspan="2">PY</th>
+        </tr>
+        <tr>
+            <th></th>
+            <th>No of CoE</th><th>Gross Sales</th>
+            <th>No of CoE</th><th>Gross Sales</th>
+            <th>No of CoE</th><th>Gross Sales</th>
+            <th>No of CoE</th><th>Gross Sales</th>
+        </tr>
+    </thead><tbody>`;
+
+    let totals = { t_coe: 0, t_sales: 0, he_coe: 0, he_sales: 0, vet_coe: 0, vet_sales: 0, py_coe: 0, py_sales: 0 };
+    Object.keys(tables.detail).forEach(c => {
+        const d = tables.detail[c];
+        totals.t_coe += d.t_coe; totals.t_sales += d.t_sales;
+        totals.he_coe += d.he_coe; totals.he_sales += d.he_sales;
+        totals.vet_coe += d.vet_coe; totals.vet_sales += d.vet_sales;
+        totals.py_coe += d.py_coe; totals.py_sales += d.py_sales;
+        detailHtml += `<tr><td>${c}</td><td>${d.t_coe}</td><td>${fmtMoney(d.t_sales)}</td><td>${d.he_coe}</td><td>${fmtMoney(d.he_sales)}</td><td>${d.vet_coe}</td><td>${fmtMoney(d.vet_sales)}</td><td>${d.py_coe}</td><td>${fmtMoney(d.py_sales)}</td></tr>`;
+    });
+    detailHtml += `<tr style="font-weight:bold; border-top:2px solid #666;"><td>Total</td><td>${totals.t_coe}</td><td>${fmtMoney(totals.t_sales)}</td><td>${totals.he_coe}</td><td>${fmtMoney(totals.he_sales)}</td><td>${totals.vet_coe}</td><td>${fmtMoney(totals.vet_sales)}</td><td>${totals.py_coe}</td><td>${fmtMoney(totals.py_sales)}</td></tr>`;
+    detailHtml += `</tbody></table>`;
+
+    bottomSection.innerHTML += detailHtml;
+    container.appendChild(bottomSection);
 }
 
 function updateChart(key, canvasId, type, labels, datasets, options = {}) {
