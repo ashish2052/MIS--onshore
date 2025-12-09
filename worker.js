@@ -8,7 +8,7 @@ const CACHE_KEY = "dashboardData";
 const CACHE_EXPIRY = 60 * 60 * 1000; // 1 hour
 
 let raw = [];
-let arData = { admission: null, migration: null };
+let arData = { admission: null, migration: null, mis: null };
 
 /* ===============================
    INDEXED DB HELPERS
@@ -203,6 +203,7 @@ async function fetchAndProcess(shouldPost) {
 
     arData.admission = arJson.admission_receivable;
     arData.migration = arJson.migration_receivable;
+    arData.mis = arJson.mis;
 
     raw = json.rows.map(r => {
       const date = parseLooseDate(r[6]);
@@ -432,6 +433,23 @@ function processData(filters) {
   const tableFYCompare = fyLabels.map(l => ({ label: l, sales: fyTotals[l] }));
 
 
+  // --- Old MIS ---
+  let misData = { periods: [], favourable: [], moderate: [], invoiced: [], received: [] };
+  if (arData.mis) {
+    // Parse and filter MIS data
+    const misFiltered = arData.mis.map(m => {
+      const d = parseLooseDate("01-" + m.Period); // "Jan-19" -> "01-Jan-19"
+      return { ...m, date: d, ym: d ? monthKey(d) : null };
+    }).filter(m => m.date && inRangeYM(m.ym, from, to, allMonths))
+      .sort((a, b) => a.date - b.date);
+
+    misData.periods = misFiltered.map(m => m.Period);
+    misData.favourable = misFiltered.map(m => parseFloat(String(m["Favourable 100%"] || "0").replace(/[$,]/g, "")) || 0);
+    misData.moderate = misFiltered.map(m => parseFloat(String(m["Moderate 75%"] || "0").replace(/[$,]/g, "")) || 0);
+    misData.invoiced = misFiltered.map(m => parseFloat(String(m["Actual Invoiced"] || "0").replace(/[$,]/g, "")) || 0);
+    misData.received = misFiltered.map(m => parseFloat(String(m["Actual Received"] || "0").replace(/[$,]/g, "")) || 0);
+  }
+
   self.postMessage({
     type: "RENDER_DATA",
     payload: {
@@ -458,7 +476,8 @@ function processData(filters) {
         underperformers,
         fyCompare: tableFYCompare
       },
-      ar: arData
+      ar: arData,
+      mis: misData
     }
   });
 }
