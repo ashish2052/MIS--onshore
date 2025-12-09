@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Global Select Group — FY Sales Dashboard (Optimized)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body class="dark bg-slate-950 text-slate-100">
+    <div class="max-w-7xl mx-auto px-4 py-6">
+
+        <!-- HEADER -->
+        <header class="mb-6 flex items-start justify-between gap-4">
+            <div>
+                <h1 class="text-2xl font-bold">Global Select — FY Sales Dashboard</h1>
+                <p class="text-slate-400 text-sm">
+                    Cloudflare-powered Sales Dashboard (Optimized)
+                </p>
+            </div>
+            <div class="flex gap-2">
+                <button id="resetBtn" class="btn-ghost">Reset Filters</button>
+                <button id="exportBtn" class="btn-ghost">Export Current Table (CSV)</button>
+            </div>
+        </header>
+
+        <!-- Load Info -->
+        <section id="parseInfo" class="card hidden mt-3 text-sm"></section>
+
+        <!-- MAIN APP -->
+        <section id="app" class="hidden mt-4">
+
+            <!-- FILTER BAR -->
+            <section class="card mb-4">
+                <div class="flex flex-wrap gap-4 items-end">
+
+                    <div>
+                        <label class="block text-sm mb-1">View</label>
+                        <select id="aggSelect" class="px-3 py-2 rounded-xl bg-slate-800">
+                            <option value="monthly">Monthly</option>
+                            <option value="quarterly">Quarterly</option>
+                        </select>
+                        <div class="text-xs text-slate-400 mt-1">
+                            Fiscal quarters: Q1 Jul–Sep, Q2 Oct–Dec, Q3 Jan–Mar, Q4 Apr–Jun
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm mb-1">Fiscal Year</label>
+                        <select id="fySelect" class="px-3 py-2 rounded-xl bg-slate-800"></select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs mb-1">
+                            <input type="checkbox" id="useRange" class="mr-2"> Use custom range
+                        </label>
+                        <div class="flex gap-2">
+                            <div>
+                                <label class="block text-sm mb-1">From</label>
+                                <select id="fromMonth" class="px-3 py-2 rounded-xl bg-slate-800" disabled></select>
+                            </div>
+                            <div>
+                                <label class="block text-sm mb-1">To</label>
+                                <select id="toMonth" class="px-3 py-2 rounded-xl bg-slate-800" disabled></select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm mb-1">Consultant</label>
+                        <select id="consultantSelect" class="px-3 py-2 rounded-xl bg-slate-800"></select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm mb-1">Provider Type</label>
+                        <select id="providerSelect" class="px-3 py-2 rounded-xl bg-slate-800"></select>
+                    </div>
+
+                    <div class="ml-auto">
+                        <label class="inline-flex items-center gap-2 text-sm">
+                            <input id="rememberFilters" type="checkbox" class="scale-110">
+                            Remember filters
+                        </label>
+                    </div>
+
+                </div>
+            </section>
+
+            <!-- KPI CARDS -->
+            <section class="grid-cards mb-6">
+
+                <div class="card">
+                    <div class="text-2xl font-semibold" id="kpiTotalAll">–</div>
+                    <div class="text-sm text-slate-400">Total Sales (till date)</div>
+                </div>
+
+                <div class="card">
+                    <div class="text-2xl font-semibold" id="kpiSelPeriod">–</div>
+                    <div class="text-sm text-slate-400">Selected Period</div>
+                </div>
+
+                <div class="card">
+                    <div class="text-2xl font-semibold" id="kpiLastFY">–</div>
+                    <div class="text-sm text-slate-400">Last FY</div>
+                </div>
+
+                <!-- UPDATED YTD CARD -->
+                <div class="card">
+                    <div class="text-2xl font-semibold" id="kpiYTD">–</div>
+                    <div class="text-sm text-slate-400">
+                        <span id="kpiYTDLabel">YTD</span> vs Last FY YTD
+                    </div>
+                    <div class="text-xs text-slate-500 mt-1" id="kpiLastFY_YTD_Detail">
+                        Last FY YTD: –
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="text-2xl font-semibold" id="kpiProjection">–</div>
+                    <div class="text-sm text-slate-400">Projected FY</div>
+                </div>
+
+                <div class="card">
+                    <div class="text-2xl font-semibold" id="kpiPoP">–</div>
+                    <div class="text-sm text-slate-400">Period-over-Period</div>
+                </div>
+
+            </section>
+            <!-- TAB NAVIGATION -->
+            <nav class="border-b border-slate-700 mb-4 flex gap-4 flex-wrap">
+                <button class="py-2 tab-active" data-tab="overview">Overview</button>
+                <button class="py-2" data-tab="fytable">Table</button>
+                <button class="py-2" data-tab="provider">Provider Breakdown</button>
+                <button class="py-2" data-tab="consultant">Consultant Breakdown</button>
+                <button class="py-2" data-tab="projection">Monthly Projections</button>
+                <button class="py-2" data-tab="fycompare">FY Compare</button>
+                <button class="py-2" data-tab="ar">AR</button>
+                <button class="py-2" data-tab="oldmis">OLD MIS</button>
+
+            </nav>
+
+            <!-- OVERVIEW TAB -->
+            <section id="tab-overview">
+                <div class="card mb-4"><canvas id="chartMonthly"></canvas></div>
+                <div class="grid-cards" style="grid-template-columns:repeat(2,minmax(0,1fr));">
+                    <div class="card"><canvas id="chartProviderPie"></canvas></div>
+                    <div class="card"><canvas id="chartConsultantPie"></canvas></div>
+                </div>
+            </section>
+
+            <!-- TABLE TAB -->
+            <section id="tab-fytable" class="hidden">
+                <div class="card">
+                    <table class="table" id="fyTable">
+                        <thead>
+                            <tr>
+                                <th id="periodTh">Month</th>
+                                <th>Net Sales</th>
+                                <th>COE Count</th>
+                                <th>Avg / COE</th>
+                                <th># Records</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- PROVIDER TAB -->
+            <section id="tab-provider" class="hidden">
+                <div class="card mb-4"><canvas id="chartProvider"></canvas></div>
+                <div class="card">
+                    <table class="table" id="providerTable">
+                        <thead>
+                            <tr>
+                                <th>Provider Type</th>
+                                <th>Net Sales</th>
+                                <th>COE Count</th>
+                                <th>Share %</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- CONSULTANT TAB -->
+            <section id="tab-consultant" class="hidden">
+                <div class="card mb-4"><canvas id="chartConsultant"></canvas></div>
+
+                <!-- DETAILED CONSULTANT SALES -->
+                <div class="card mt-4">
+                    <h3 class="font-semibold mb-2">Detailed Consultant Sales (HE / VET / PY)</h3>
+
+                    <table class="table" id="consultantDetailTable">
+                        <thead>
+                            <tr>
+                                <th>Sales Team</th>
+                                <th colspan="2">Total</th>
+                                <th colspan="2">HE</th>
+                                <th colspan="2">VET</th>
+                                <th colspan="2">PY</th>
+                            </tr>
+                            <tr>
+                                <th></th>
+                                <th>No of CoE</th>
+                                <th>Gross Sales</th>
+                                <th>No of CoE</th>
+                                <th>Gross Sales</th>
+                                <th>No of CoE</th>
+                                <th>Gross Sales</th>
+                                <th>No of CoE</th>
+                                <th>Gross Sales</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+
+                <!-- CONSULTANT TOTAL TABLE -->
+                <div class="card">
+                    <table class="table" id="consultantTable">
+                        <thead>
+                            <tr>
+                                <th>Consultant</th>
+                                <th>Net Sales</th>
+                                <th>COE Count</th>
+                                <th>Share %</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+
+                <!-- UNDERPERFORMERS -->
+                <div class="card mt-4">
+                    <h3 class="font-semibold mb-2">Underperformers</h3>
+                    <table class="table" id="underTable">
+                        <thead>
+                            <tr>
+                                <th>Consultant</th>
+                                <th>Sales</th>
+                                <th>vs Avg</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+
+            </section><!-- consultant -->
+
+            <!-- PROJECTIONS -->
+            <section id="tab-projection" class="hidden">
+                <div class="card mb-4"><canvas id="chartProjection"></canvas></div>
+                <div class="card">
+                    <table class="table" id="projectionTable">
+                        <thead>
+                            <tr>
+                                <th>Month</th>
+                                <th>Actual</th>
+                                <th>Projected</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <p class="text-xs text-slate-400 mt-2">
+                    Projection = average of completed months applied to remaining months.
+                </p>
+            </section>
+
+            <!-- FY COMPARE -->
+            <section id="tab-fycompare" class="hidden">
+                <div class="card mb-4"><canvas id="chartFY"></canvas></div>
+                <div class="card">
+                    <table class="table" id="fyCompareTable">
+                        <thead>
+                            <tr>
+                                <th>FY</th>
+                                <th>Total Sales</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- AR TAB -->
+            <section id="tab-ar" class="hidden">
+                <div id="arContent"></div>
+            </section>
+
+            <!-- OLD MIS TAB -->
+            <section id="tab-oldmis" class="hidden">
+                <div class="card p-8 text-center text-slate-400">
+                    Old MIS Data (Coming Soon)
+                </div>
+            </section>
+
+        </section><!-- end #app -->
+
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
