@@ -38,7 +38,8 @@ const els = {
     underTableBody: document.querySelector("#underTable tbody"),
     projectionTableBody: document.querySelector("#projectionTable tbody"),
     fyCompareTableBody: document.querySelector("#fyCompareTable tbody"),
-    arContent: document.getElementById("arContent")
+    arContent: document.getElementById("arContent"),
+    oldMisContent: document.getElementById("oldMisContent")
 };
 
 /* ===============================
@@ -189,6 +190,9 @@ function renderUI(data) {
     // AR
     renderAR(ar);
 
+    // Old MIS
+    renderOldMIS(data.mis);
+
     // Charts
     updateChart("monthly", "chartMonthly", "bar", chartData.monthly.labels, [{ label: "Net Sales", data: chartData.monthly.data }]);
     updateChart("provider", "chartProvider", "bar", chartData.provider.labels, [{ label: "Net Sales", data: chartData.provider.data }]);
@@ -243,6 +247,47 @@ function renderAR(arData) {
 
     els.arContent.innerHTML += render(arData.admission, "Admission Receivable");
     els.arContent.innerHTML += render(arData.migration, "Migration Receivable");
+}
+
+function renderOldMIS(mis) {
+    if (!mis || !mis.periods || mis.periods.length === 0) {
+        els.oldMisContent.innerHTML = `<div class="card p-8 text-center text-slate-400">No Old MIS data for selected period</div>`;
+        return;
+    }
+
+    const { periods, favourable, moderate, invoiced, received } = mis;
+
+    let html = `
+    <div class="card overflow-x-auto">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Expected Receivable - Period</th>
+            ${periods.map(p => `<th>${p}</th>`).join("")}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Favourable Scenario</td>
+            ${favourable.map(v => `<td>${fmtMoney(v)}</td>`).join("")}
+          </tr>
+          <tr>
+            <td>Moderate Scenario</td>
+            ${moderate.map(v => `<td>${fmtMoney(v)}</td>`).join("")}
+          </tr>
+          <tr class="bg-slate-800/50">
+            <td>Actual Invoiced</td>
+            ${invoiced.map(v => `<td>${v ? fmtMoney(v) : "NA"}</td>`).join("")}
+          </tr>
+          <tr class="bg-slate-800/50">
+            <td>Actual Received</td>
+            ${received.map(v => `<td>${v ? fmtMoney(v) : "NA"}</td>`).join("")}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+    els.oldMisContent.innerHTML = html;
 }
 
 function updateChart(key, canvasId, type, labels, datasets, options = {}) {
