@@ -2,9 +2,47 @@
 
 const CLOUDFLARE_URL = "https://mis-onshore.ashishoct34.workers.dev/";
 const AR_URL = "https://ar.ashishoct34.workers.dev/";
+const DB_NAME = "SalesDashboardDB";
+const STORE_NAME = "dataStore";
+const CACHE_KEY = "dashboardData";
+const CACHE_EXPIRY = 60 * 60 * 1000; // 1 hour
 
 let raw = [];
 let arData = { admission: null, migration: null };
+
+/* ===============================
+   INDEXED DB HELPERS
+   =============================== */
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = (e) => {
+      e.target.result.createObjectStore(STORE_NAME);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function getCache() {
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, "readonly");
+      const req = tx.objectStore(STORE_NAME).get(CACHE_KEY);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    });
+  } catch (e) { return null; }
+}
+
+async function setCache(data) {
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    tx.objectStore(STORE_NAME).put({ ...data, timestamp: Date.now() }, CACHE_KEY);
+  } catch (e) { console.error("Cache save failed", e); }
+}
 
 /* ===============================
    HELPERS
@@ -13,17 +51,35 @@ function fetchFresh(url) {
   return fetch(url + "?t=" + Date.now());
 }
 
+// Optimized Date Parser
+const dateCache = new Map();
 function parseLooseDate(s) {
   if (!s) return null;
-  const d = new Date(s);
-  if (!isNaN(d)) return d;
-  const m = String(s).match(/^(\d{1,2})[-\/](\w+)[-\/](\d{2,4})$/i);
-  if (m) {
-    return new Date(
-      m[3].length === 2 ? "20" + m[3] : m[3],
-      new Date(Date.parse(m[2] + " 1, 2000")).getMonth(),
-      m[1]
-    );
+  if (dateCache.has(s)) return dateCache.get(s);
+
+  let d = null;
+  // Try ISO/Simple format first (fast path)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    d = new Date(s);
+  } else {
+    const parsed = new Date(s);
+    if (!isNaN(parsed)) {
+      d = parsed;
+    } else {
+      const m = String(s).match(/^(\d{1,2})[-\/](\w+)[-\/](\d{2,4})$/i);
+      if (m) {
+        d = new Date(
+          m[3].length === 2 ? "20" + m[3] : m[3],
+          new Date(Date.parse(m[2] + " 1, 2000")).getMonth(),
+          m[1]
+        );
+      }
+    }
+  }
+
+  if (d && !isNaN(d)) {
+    dateCache.set(s, d);
+    return d;
   }
   return null;
 }
@@ -111,13 +167,31 @@ self.onmessage = async (e) => {
   const { type, payload } = e.data;
 
   if (type === "INIT") {
-    await loadData();
+    await initData();
   } else if (type === "FILTER") {
     processData(payload);
   }
 };
 
-async function loadData() {
+async function initData() {
+  // 1. Try Cache First
+  const cached = await getCache();
+  if (cached && (Date.now() - cached.timestamp < CACHE_EXPIRY)) {
+    // Hydrate from cache
+    raw = cached.raw.map(r => ({ ...r, date: new Date(r.date) })); // Restore Date objects
+    arData = cached.arData;
+
+    postLoadedMessage(true); // true = from cache
+
+    // Background refresh (optional, but good for freshness)
+    fetchAndProcess(false);
+  } else {
+    // No cache or expired, fetch immediately
+    await fetchAndProcess(true);
+  }
+}
+
+async function fetchAndProcess(shouldPost) {
   try {
     const [salesResp, arResp] = await Promise.all([
       fetchFresh(CLOUDFLARE_URL),
@@ -143,33 +217,43 @@ async function loadData() {
       };
     }).filter(r => r.date);
 
-    // Build domains (Filters)
-    const months = new Set(), fys = new Set();
-    const cons = new Set(["All"]), prov = new Set(["All"]);
+    // Save to Cache
+    setCache({ raw, arData });
 
-    raw.forEach(r => {
-      months.add(r.ym);
-      fys.add(fyLabelFromDate(r.date));
-      cons.add(r.consultant);
-      prov.add(r.provider);
-    });
-
-    const allMonths = Array.from(months).sort();
-    const allFYs = Array.from(fys).sort();
-    const allCons = Array.from(cons).sort();
-    const allProv = Array.from(prov).sort();
-
-    self.postMessage({
-      type: "DATA_LOADED",
-      payload: {
-        count: raw.length,
-        filters: { allMonths, allFYs, allCons, allProv }
-      }
-    });
+    if (shouldPost) {
+      postLoadedMessage(false);
+    }
 
   } catch (err) {
-    self.postMessage({ type: "ERROR", payload: err.message });
+    if (shouldPost) self.postMessage({ type: "ERROR", payload: err.message });
   }
+}
+
+function postLoadedMessage(isCache) {
+  // Build domains (Filters)
+  const months = new Set(), fys = new Set();
+  const cons = new Set(["All"]), prov = new Set(["All"]);
+
+  raw.forEach(r => {
+    months.add(r.ym);
+    fys.add(fyLabelFromDate(r.date));
+    cons.add(r.consultant);
+    prov.add(r.provider);
+  });
+
+  const allMonths = Array.from(months).sort();
+  const allFYs = Array.from(fys).sort();
+  const allCons = Array.from(cons).sort();
+  const allProv = Array.from(prov).sort();
+
+  self.postMessage({
+    type: "DATA_LOADED",
+    payload: {
+      count: raw.length,
+      filters: { allMonths, allFYs, allCons, allProv },
+      source: isCache ? "CACHE" : "NETWORK"
+    }
+  });
 }
 
 function processData(filters) {
