@@ -161,7 +161,7 @@ function renderUI(data) {
     els.kpiPoP.innerHTML = `${fmtMoney(kpis.pop.current)} <span class="badge" style="background:${kpis.pop.delta >= 0 ? '#16653433' : '#991b1b33'}">${kpis.pop.delta == null ? 'n/a' : (kpis.pop.delta >= 0 ? '+' : '') + kpis.pop.delta.toFixed(1)}% ${kpis.pop.label}</span>`;
 
     // Tables
-    renderTable(els.fyTableBody, tables.fy, ["label", "sales", "coe", "avg", "count"], [fmtMoney, null, fmtMoney, null]);
+    renderTable(els.fyTableBody, tables.fy, ["label", "sales", "coe", "avg", "count"], [null, fmtMoney, null, fmtMoney, null]);
     renderTable(els.providerTableBody, tables.provider, ["label", "sales", "coe", "share"], [fmtMoney, null, (v) => v.toFixed(1) + "%"]);
     renderTable(els.consultantTableBody, tables.consultant, ["label", "sales", "coe", "share"], [fmtMoney, null, (v) => v.toFixed(1) + "%"]);
     renderTable(els.underTableBody, tables.underperformers, ["name", "sales", "pct"], [fmtMoney, (v) => v.toFixed(0) + "%"]);
